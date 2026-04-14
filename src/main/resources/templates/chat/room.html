@@ -58,6 +58,16 @@
     function renderMessage(msg) {
         const isMe = msg.senderId === loginUserId;
 
+        // 시간 그룹 표시
+        if (msg.time !== lastTime) {
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'time-divider';
+            timeDiv.textContent = msg.time;
+
+            chatBody.appendChild(timeDiv);
+            lastTime = msg.time;
+        }
+
         const wrapper = document.createElement('div');
         wrapper.className = 'message ' + (isMe ? 'me' : 'other');
 
@@ -65,14 +75,37 @@
         bubble.className = 'bubble';
         bubble.textContent = msg.content;
 
-        wrapper.appendChild(bubble);
-        chatBody.appendChild(wrapper);
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = msg.time;
 
+        // 위치 다르게
+        if (isMe) {
+            wrapper.appendChild(time);
+            wrapper.appendChild(bubble);
+        } else {
+            wrapper.appendChild(bubble);
+            wrapper.appendChild(time);
+        }
+
+        // 상대 메시지 위 닉네임 표시
+        if (!isMe) {
+            const name = document.createElement('div');
+            name.style.fontSize = '12px';
+            name.style.color = '#555';
+            name.textContent = msg.senderNickname;
+
+            wrapper.appendChild(name);
+        }
+
+        chatBody.appendChild(wrapper);
         chatBody.scrollTop = chatBody.scrollHeight;
     }
 
+    // 기존 메시지 로딩 시 초기화
     function clearMessages() {
         chatBody.innerHTML = '';
+        lastTime = null;
     }
 
     // =========================
@@ -117,8 +150,10 @@
     // =========================
     sendBtn.addEventListener('click', sendMessage);
 
+    // Enter 전송 UX 개선
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             sendMessage();
         }
     });

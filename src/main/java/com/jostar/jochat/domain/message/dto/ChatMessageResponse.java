@@ -8,6 +8,6 @@ public record ChatMessageResponse(
         Long senderId,
         String senderNickname,
         String content,
-        LocalDateTime createdAt
+        String time
 ) {
 }

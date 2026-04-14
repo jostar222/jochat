@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.time.format.DateTimeFormatter;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +24,7 @@ public class ChatMessageService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomService chatRoomService;
     private final UserRepository userRepository;
+    private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("a hh:mm"); // 오전/오후 10:32
 
     @Transactional
     public ChatMessageResponse saveMessage(Long roomId, Long senderId, String content) {
@@ -50,7 +52,7 @@ public class ChatMessageService {
                 sender.getId(),
                 sender.getNickname(),
                 message.getContent(),
-                message.getCreatedAt()
+                message.getCreatedAt().format(formatter)
         );
     }
 
@@ -67,7 +69,7 @@ public class ChatMessageService {
                         message.getSender().getId(),
                         message.getSender().getNickname(),
                         message.getContent(),
-                        message.getCreatedAt()
+                        message.getCreatedAt().format(formatter)
                 ))
                 .toList();
     }

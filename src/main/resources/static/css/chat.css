@@ -92,3 +92,49 @@ body {
 .chat-footer button {
     margin-left: 10px;
 }
+
+.time-divider {
+    text-align: center;
+    font-size: 12px;
+    color: #888;
+    margin: 10px 0;
+}
+
+/* 메시지 */
+.message {
+    display: flex;
+    margin: 6px 0;
+    align-items: flex-end;
+}
+
+.message.me {
+    justify-content: flex-end;
+}
+
+.message.other {
+    justify-content: flex-start;
+}
+
+.bubble {
+    padding: 10px;
+    border-radius: 12px;
+    max-width: 60%;
+    position: relative;
+}
+
+/* 내 메시지 */
+.me .bubble {
+    background: #ffe812;
+}
+
+/* 상대 메시지 */
+.other .bubble {
+    background: white;
+}
+
+/* 시간 */
+.time {
+    font-size: 10px;
+    color: #666;
+    margin: 0 5px;
+}
