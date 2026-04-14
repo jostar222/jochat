@@ -12,22 +12,23 @@
         <div class="sidebar-header">채팅</div>
 
         <div class="room-list">
-            <a th:each="room : ${rooms}"
-               th:href="@{/chat/rooms/{roomId}(roomId=${room.roomId})}"
+            <a th:each="r : ${rooms}"
+               th:href="@{/chat/rooms/{roomId}(roomId=${r.roomId})}"
                class="room-item"
-               th:classappend="${selectedRoomId != null and selectedRoomId == room.roomId} ? ' active'">
+               th:attr="data-room-id=${r.roomId}"
+               th:classappend="${selectedRoomId != null and selectedRoomId == r.roomId} ? ' active'">
 
                 <div class="room-top">
-                    <div class="room-name" th:text="${room.roomName}">채팅방명</div>
+                    <div class="room-name" th:text="${r.roomName}">채팅방명</div>
                     <div class="room-time"
-                         th:text="${room.lastMessageTime != null ? #temporals.format(room.lastMessageTime, 'HH:mm') : ''}">
+                         th:text="${r.lastMessageTime != null ? #temporals.format(r.lastMessageTime, 'HH:mm') : ''}">
                         14:30
                     </div>
                 </div>
 
                 <div class="room-bottom">
                     <div class="room-last-message"
-                         th:text="${room.lastMessage != null and !#strings.isEmpty(room.lastMessage) ? room.lastMessage : '대화를 시작해보세요.'}">
+                         th:text="${r.lastMessage != null and !#strings.isEmpty(r.lastMessage) ? r.lastMessage : '대화를 시작해보세요.'}">
                         마지막 메시지
                     </div>
                 </div>

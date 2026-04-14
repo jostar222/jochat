@@ -18,6 +18,7 @@
             <a th:each="r : ${rooms}"
                th:href="@{/chat/rooms/{roomId}(roomId=${r.roomId})}"
                class="room-item"
+               th:attr="data-room-id=${r.roomId}"
                th:classappend="${selectedRoomId != null and selectedRoomId == r.roomId} ? ' active'">
 
                 <div class="room-top">
@@ -148,7 +149,9 @@
 
         stompClient.connect({}, () => {
             stompClient.subscribe(`/sub/chat.room.${roomId}`, (message) => {
-                renderMessage(JSON.parse(message.body));
+                const parsed = JSON.parse(message.body);
+                renderMessage(parsed);
+                updateRoomListPreview(parsed);
             });
         });
     }
@@ -164,6 +167,32 @@
 
         input.value = '';
         input.focus();
+    }
+
+    function formatRoomListTime(timeText) {
+        if (!timeText) return '';
+        return timeText.replace('오전 ', '').replace('오후 ', '');
+    }
+
+    function updateRoomListPreview(message) {
+        const roomItem = document.querySelector(`.room-item[data-room-id="${message.roomId}"]`);
+        if (!roomItem) return;
+
+        const lastMessageEl = roomItem.querySelector('.room-last-message');
+        const timeEl = roomItem.querySelector('.room-time');
+        const roomList = document.querySelector('.room-list');
+
+        if (lastMessageEl) {
+            lastMessageEl.textContent = message.content;
+        }
+
+        if (timeEl) {
+            timeEl.textContent = formatRoomListTime(message.time);
+        }
+
+        if (roomList && roomList.firstElementChild !== roomItem) {
+            roomList.prepend(roomItem);
+        }
     }
 
     sendBtn.addEventListener('click', sendMessage);
