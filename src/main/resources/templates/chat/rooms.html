@@ -31,6 +31,12 @@
                          th:text="${r.lastMessage != null and !#strings.isEmpty(r.lastMessage) ? r.lastMessage : '대화를 시작해보세요.'}">
                         마지막 메시지
                     </div>
+
+                    <div class="unread-badge"
+                         th:if="${r.unreadCount > 0}"
+                         th:text="${r.unreadCount}">
+                        1
+                    </div>
                 </div>
             </a>
         </div>

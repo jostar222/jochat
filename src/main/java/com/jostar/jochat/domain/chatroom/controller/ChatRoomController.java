@@ -43,6 +43,7 @@ public class ChatRoomController {
         Long loginUserId = chatRoomService.getLoginUserIdByUsername(userDetails.getUsername());
 
         chatRoomService.validateRoomMember(roomId, loginUserId);
+        chatRoomService.markAsRead(roomId, loginUserId);
 
         model.addAttribute("rooms", chatRoomService.getMyRooms(loginUserId));
         model.addAttribute("users", chatRoomService.getOtherUsers(loginUserId));

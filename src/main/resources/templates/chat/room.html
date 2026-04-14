@@ -5,6 +5,9 @@
     <title th:text="${room.roomName}">채팅방</title>
     <link rel="stylesheet" href="/css/chat.css">
 
+    <meta name="_csrf" th:content="${_csrf.token}" />
+    <meta name="_csrf_header" th:content="${_csrf.headerName}" />
+
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 </head>
@@ -33,6 +36,12 @@
                     <div class="room-last-message"
                          th:text="${r.lastMessage != null and !#strings.isEmpty(r.lastMessage) ? r.lastMessage : '대화를 시작해보세요.'}">
                         마지막 메시지
+                    </div>
+
+                    <div class="unread-badge"
+                         th:if="${r.unreadCount > 0}"
+                         th:text="${r.unreadCount}">
+                        1
                     </div>
                 </div>
             </a>
@@ -73,8 +82,12 @@
     const input = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
 
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+    const csrfHeader = document.querySelector('meta[name="_csrf_header"]').content;
+
     let stompClient = null;
     let lastTime = null;
+    let reconnectTimer = null;
 
     function clearMessages() {
         chatBody.innerHTML = '';
@@ -147,18 +160,40 @@
         const socket = new SockJS('/ws-chat');
         stompClient = Stomp.over(socket);
 
+        // 필요하면 로그 줄이기
+        stompClient.debug = null;
+
         stompClient.connect({}, () => {
-            stompClient.subscribe(`/sub/chat.room.${roomId}`, (message) => {
+            console.log('STOMP connected');
+            isStompConnected = true;
+
+            stompClient.subscribe(`/sub/chat.room.${roomId}`, async (message) => {
                 const parsed = JSON.parse(message.body);
                 renderMessage(parsed);
                 updateRoomListPreview(parsed);
+                await markRoomAsRead(roomId);
             });
+        }, (error) => {
+            console.error('STOMP error', error);
+            isStompConnected = false;
+            scheduleReconnect();
         });
+
+        socket.onclose = () => {
+            console.warn('SockJS closed');
+            isStompConnected = false;
+            scheduleReconnect();
+        };
     }
 
     function sendMessage() {
         const content = input.value.trim();
         if (!content) return;
+
+        if (!stompClient || !isStompConnected) {
+            console.warn('WebSocket 연결이 아직 안 되었거나 끊어졌습니다.');
+            return;
+        }
 
         stompClient.send('/pub/chat.send', {}, JSON.stringify({
             roomId: roomId,
@@ -195,6 +230,45 @@
         }
     }
 
+    function clearUnreadBadge(roomId) {
+        const roomItem = document.querySelector(`.room-item[data-room-id="${roomId}"]`);
+        if (!roomItem) return;
+
+        const badge = roomItem.querySelector('.unread-badge');
+        if (badge) {
+            badge.remove();
+        }
+    }
+
+    async function markRoomAsRead(roomId) {
+        try {
+            const response = await fetch(`/api/chat/rooms/${roomId}/read`, {
+                method: 'POST',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
+            });
+
+            if (!response.ok) {
+                console.error('읽음 처리 실패 status=', response.status);
+                return;
+            }
+
+            clearUnreadBadge(roomId);
+        } catch (e) {
+            console.error('읽음 처리 실패', e);
+        }
+    }
+
+    function scheduleReconnect() {
+        if (reconnectTimer) return;
+
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+        }, 1500);
+    }
+
     sendBtn.addEventListener('click', sendMessage);
 
     input.addEventListener('keydown', (e) => {
@@ -204,8 +278,26 @@
         }
     });
 
-    loadMessages();
-    connect();
+    window.addEventListener('beforeunload', () => {
+        if (stompClient && isStompConnected) {
+            try {
+                stompClient.disconnect(() => {
+                    console.log('STOMP disconnected');
+                });
+            } catch (e) {
+                console.warn('disconnect error', e);
+            }
+        }
+    });
+
+    async function init() {
+        await loadMessages();
+        clearUnreadBadge(roomId);
+        connect();
+    }
+
+    init();
+
 </script>
 
 </body>

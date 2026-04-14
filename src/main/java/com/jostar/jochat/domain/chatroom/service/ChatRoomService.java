@@ -33,16 +33,27 @@ public class ChatRoomService {
         List<ChatRoomMember> members = chatRoomMemberRepository.findByUserId(loginUserId);
 
         return members.stream()
-                .map(ChatRoomMember::getChatRoom)
-                .map(room -> {
+                .map(member -> {
+                    ChatRoom room = member.getChatRoom();
+
                     Optional<ChatMessage> lastMessage = chatMessageRepository
                             .findTopByChatRoomIdOrderByCreatedAtDesc(room.getId());
+
+                    Long lastReadMessageId = member.getLastReadMessageId() == null ? 0L : member.getLastReadMessageId();
+
+                    long unreadCount = chatMessageRepository
+                            .countByChatRoomIdAndIdGreaterThanAndSenderIdNot(
+                                    room.getId(),
+                                    lastReadMessageId,
+                                    loginUserId
+                            );
 
                     return new ChatRoomListItemResponse(
                             room.getId(),
                             room.getRoomName(),
                             lastMessage.map(ChatMessage::getContent).orElse(""),
-                            lastMessage.map(ChatMessage::getCreatedAt).orElse(null)
+                            lastMessage.map(ChatMessage::getCreatedAt).orElse(null),
+                            unreadCount
                     );
                 })
                 .sorted(Comparator.comparing(
@@ -127,5 +138,16 @@ public class ChatRoomService {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
                 .getId();
+    }
+
+    @Transactional
+    public void markAsRead(Long roomId, Long userId) {
+        ChatRoomMember member = chatRoomMemberRepository.findByChatRoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHAT_ROOM_MEMBER));
+
+        Optional<ChatMessage> lastMessage = chatMessageRepository.findTopByChatRoomIdOrderByCreatedAtDesc(roomId);
+
+        Long lastMessageId = lastMessage.map(ChatMessage::getId).orElse(0L);
+        member.updateLastReadMessageId(lastMessageId);
     }
 }

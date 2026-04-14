@@ -35,6 +35,9 @@ public class ChatRoomMember {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @Column(name = "last_read_message_id")
+    private Long lastReadMessageId;
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime joinedAt;
@@ -43,5 +46,10 @@ public class ChatRoomMember {
     public ChatRoomMember(ChatRoom chatRoom, User user) {
         this.chatRoom = chatRoom;
         this.user = user;
+        this.lastReadMessageId = 0L;
+    }
+
+    public void updateLastReadMessageId(Long lastReadMessageId) {
+        this.lastReadMessageId = lastReadMessageId;
     }
 }
