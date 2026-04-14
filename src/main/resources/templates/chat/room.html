@@ -3,40 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <title th:text="${room.roomName}">채팅방</title>
-
     <link rel="stylesheet" href="/css/chat.css">
 
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 </head>
-
 <body>
 
 <div class="container">
-
-    <!-- 좌측 채팅방 리스트 -->
     <div class="sidebar">
-        <div th:each="r : ${rooms}" class="room-item">
-            <a th:href="@{/chat/rooms/{id}(id=${r.roomId})}"
-               th:text="${r.roomName}"></a>
+        <div class="sidebar-header">채팅</div>
+
+        <div class="room-list">
+            <a th:each="r : ${rooms}"
+               th:href="@{/chat/rooms/{roomId}(roomId=${r.roomId})}"
+               class="room-item"
+               th:classappend="${selectedRoomId != null and selectedRoomId == r.roomId} ? ' active'">
+
+                <div class="room-top">
+                    <div class="room-name" th:text="${r.roomName}">채팅방명</div>
+                    <div class="room-time"
+                         th:text="${r.lastMessageTime != null ? #temporals.format(r.lastMessageTime, 'HH:mm') : ''}">
+                        14:30
+                    </div>
+                </div>
+
+                <div class="room-bottom">
+                    <div class="room-last-message"
+                         th:text="${r.lastMessage != null and !#strings.isEmpty(r.lastMessage) ? r.lastMessage : '대화를 시작해보세요.'}">
+                        마지막 메시지
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="user-section">
+            <div class="user-section-title">새 대화 시작</div>
+
+            <div th:each="user : ${users}" class="user-item">
+                <div class="user-name" th:text="${user.nickname}">사용자명</div>
+
+                <form method="post" th:action="@{/chat/rooms/direct}">
+                    <input type="hidden" name="targetUserId" th:value="${user.id}">
+                    <button type="submit" class="start-chat-btn">채팅하기</button>
+                </form>
+            </div>
         </div>
     </div>
 
-    <!-- 우측 채팅 -->
     <div class="chat-area">
-
-        <!-- 상단 -->
-        <div class="chat-header" th:text="${room.roomName}"></div>
-
-        <!-- 메시지 영역 -->
+        <div class="chat-header" th:text="${room.roomName}">채팅방명</div>
         <div id="chatBody" class="chat-body"></div>
 
-        <!-- 입력 -->
         <div class="chat-footer">
-            <input type="text" id="messageInput" placeholder="메시지 입력">
+            <input type="text" id="messageInput" placeholder="메시지를 입력하세요">
             <button id="sendBtn">전송</button>
         </div>
-
     </div>
 </div>
 
@@ -51,25 +73,43 @@
     const sendBtn = document.getElementById('sendBtn');
 
     let stompClient = null;
+    let lastTime = null;
 
-    // =========================
-    // UI
-    // =========================
+    function clearMessages() {
+        chatBody.innerHTML = '';
+        lastTime = null;
+    }
+
     function renderMessage(msg) {
         const isMe = msg.senderId === loginUserId;
 
-        // 시간 그룹 표시
         if (msg.time !== lastTime) {
             const timeDiv = document.createElement('div');
             timeDiv.className = 'time-divider';
             timeDiv.textContent = msg.time;
-
             chatBody.appendChild(timeDiv);
             lastTime = msg.time;
         }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'message ' + (isMe ? 'me' : 'other');
+
+        const contentGroup = document.createElement('div');
+
+        if (isMe) {
+            contentGroup.className = 'message-content-group';
+        } else {
+            contentGroup.className = 'message-content-group';
+        }
+
+        const bubbleWrap = document.createElement('div');
+
+        if (!isMe) {
+            const name = document.createElement('div');
+            name.className = 'sender-name';
+            name.textContent = msg.senderNickname;
+            bubbleWrap.appendChild(name);
+        }
 
         const bubble = document.createElement('div');
         bubble.className = 'bubble';
@@ -79,38 +119,21 @@
         time.className = 'time';
         time.textContent = msg.time;
 
-        // 위치 다르게
+        bubbleWrap.appendChild(bubble);
+
         if (isMe) {
-            wrapper.appendChild(time);
-            wrapper.appendChild(bubble);
+            contentGroup.appendChild(time);
+            contentGroup.appendChild(bubbleWrap);
         } else {
-            wrapper.appendChild(bubble);
-            wrapper.appendChild(time);
+            contentGroup.appendChild(bubbleWrap);
+            contentGroup.appendChild(time);
         }
 
-        // 상대 메시지 위 닉네임 표시
-        if (!isMe) {
-            const name = document.createElement('div');
-            name.style.fontSize = '12px';
-            name.style.color = '#555';
-            name.textContent = msg.senderNickname;
-
-            wrapper.appendChild(name);
-        }
-
+        wrapper.appendChild(contentGroup);
         chatBody.appendChild(wrapper);
         chatBody.scrollTop = chatBody.scrollHeight;
     }
 
-    // 기존 메시지 로딩 시 초기화
-    function clearMessages() {
-        chatBody.innerHTML = '';
-        lastTime = null;
-    }
-
-    // =========================
-    // API
-    // =========================
     async function loadMessages() {
         const res = await fetch(`/api/chat/rooms/${roomId}/messages`);
         const data = await res.json();
@@ -119,16 +142,13 @@
         data.forEach(renderMessage);
     }
 
-    // =========================
-    // WebSocket
-    // =========================
     function connect() {
         const socket = new SockJS('/ws-chat');
         stompClient = Stomp.over(socket);
 
         stompClient.connect({}, () => {
-            stompClient.subscribe(`/sub/chat.room.${roomId}`, (msg) => {
-                renderMessage(JSON.parse(msg.body));
+            stompClient.subscribe(`/sub/chat.room.${roomId}`, (message) => {
+                renderMessage(JSON.parse(message.body));
             });
         });
     }
@@ -143,14 +163,11 @@
         }));
 
         input.value = '';
+        input.focus();
     }
 
-    // =========================
-    // 이벤트
-    // =========================
     sendBtn.addEventListener('click', sendMessage);
 
-    // Enter 전송 UX 개선
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -158,9 +175,6 @@
         }
     });
 
-    // =========================
-    // init
-    // =========================
     loadMessages();
     connect();
 </script>

@@ -22,6 +22,7 @@ public class ChatRoomController {
 
         model.addAttribute("rooms", chatRoomService.getMyRooms(loginUserId));
         model.addAttribute("users", chatRoomService.getOtherUsers(loginUserId));
+        model.addAttribute("selectedRoomId", null);
 
         return "chat/rooms";
     }
@@ -42,6 +43,10 @@ public class ChatRoomController {
         Long loginUserId = chatRoomService.getLoginUserIdByUsername(userDetails.getUsername());
 
         chatRoomService.validateRoomMember(roomId, loginUserId);
+
+        model.addAttribute("rooms", chatRoomService.getMyRooms(loginUserId));
+        model.addAttribute("users", chatRoomService.getOtherUsers(loginUserId));
+        model.addAttribute("selectedRoomId", roomId);
 
         model.addAttribute("room", chatRoomService.getRoom(roomId));
         model.addAttribute("loginUserId", loginUserId);

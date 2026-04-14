@@ -2,35 +2,58 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>채팅방 목록</title>
+    <title>채팅</title>
+    <link rel="stylesheet" href="/css/chat.css">
 </head>
 <body>
-<h2>채팅방 목록</h2>
 
-<form method="post" th:action="@{/logout}">
-    <button type="submit">로그아웃</button>
-</form>
+<div class="container">
+    <div class="sidebar">
+        <div class="sidebar-header">채팅</div>
 
-<h3>내 채팅방</h3>
-<ul>
-    <li th:each="room : ${rooms}">
-        <a th:href="@{/chat/rooms/{roomId}(roomId=${room.roomId})}"
-           th:text="${room.roomName}">채팅방</a>
-        <span th:text="${room.lastMessage}"></span>
-    </li>
-</ul>
+        <div class="room-list">
+            <a th:each="room : ${rooms}"
+               th:href="@{/chat/rooms/{roomId}(roomId=${room.roomId})}"
+               class="room-item"
+               th:classappend="${selectedRoomId != null and selectedRoomId == room.roomId} ? ' active'">
 
-<hr>
+                <div class="room-top">
+                    <div class="room-name" th:text="${room.roomName}">채팅방명</div>
+                    <div class="room-time"
+                         th:text="${room.lastMessageTime != null ? #temporals.format(room.lastMessageTime, 'HH:mm') : ''}">
+                        14:30
+                    </div>
+                </div>
 
-<h3>대화 시작</h3>
-<ul>
-    <li th:each="user : ${users}">
-        <span th:text="${user.nickname}">닉네임</span>
-        <form method="post" th:action="@{/chat/rooms/direct}" style="display:inline;">
-            <input type="hidden" name="targetUserId" th:value="${user.id}">
-            <button type="submit">채팅하기</button>
-        </form>
-    </li>
-</ul>
+                <div class="room-bottom">
+                    <div class="room-last-message"
+                         th:text="${room.lastMessage != null and !#strings.isEmpty(room.lastMessage) ? room.lastMessage : '대화를 시작해보세요.'}">
+                        마지막 메시지
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="user-section">
+            <div class="user-section-title">새 대화 시작</div>
+
+            <div th:each="user : ${users}" class="user-item">
+                <div class="user-name" th:text="${user.nickname}">사용자명</div>
+
+                <form method="post" th:action="@{/chat/rooms/direct}">
+                    <input type="hidden" name="targetUserId" th:value="${user.id}">
+                    <button type="submit" class="start-chat-btn">채팅하기</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-area">
+        <div class="chat-empty">
+            대화할 채팅방을 선택하세요.
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
