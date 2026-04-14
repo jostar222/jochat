@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>채팅방 목록</title>
+</head>
+<body>
+<h2>채팅방 목록</h2>
+
+<form method="post" th:action="@{/logout}">
+    <button type="submit">로그아웃</button>
+</form>
+
+<h3>내 채팅방</h3>
+<ul>
+    <li th:each="room : ${rooms}">
+        <a th:href="@{/chat/rooms/{roomId}(roomId=${room.roomId})}"
+           th:text="${room.roomName}">채팅방</a>
+        <span th:text="${room.lastMessage}"></span>
+    </li>
+</ul>
+
+<hr>
+
+<h3>대화 시작</h3>
+<ul>
+    <li th:each="user : ${users}">
+        <span th:text="${user.nickname}">닉네임</span>
+        <form method="post" th:action="@{/chat/rooms/direct}" style="display:inline;">
+            <input type="hidden" name="targetUserId" th:value="${user.id}">
+            <button type="submit">채팅하기</button>
+        </form>
+    </li>
+</ul>
+</body>
+</html>
