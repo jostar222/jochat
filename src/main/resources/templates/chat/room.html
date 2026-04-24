@@ -85,7 +85,10 @@
     <!-- 우측 채팅 영역 -->
     <div class="chat-area">
 
-        <div class="chat-header" th:text="${room.roomName}"></div>
+        <div class="chat-header chat-header-with-action">
+            <span th:text="${room.roomName}"></span>
+            <button type="button" id="leaveRoomBtn" class="leave-room-btn">나가기</button>
+        </div>
 
         <div id="chatBody" class="chat-body"></div>
 
@@ -114,6 +117,7 @@
     let isStompConnected = false;
     let reconnectTimer = null;
     let lastTime = null;
+    let leavingRoom = false;
 
     // =========================
     // 메시지 렌더링
@@ -297,6 +301,25 @@
                 }
             });
 
+            stompClient.subscribe('/user/queue/rooms-deleted', (message) => {
+                const data = JSON.parse(message.body);
+
+                const roomItem = document.querySelector(`.room-item[data-room-id="${data.roomId}"]`);
+                if (roomItem) {
+                    roomItem.remove();
+                }
+
+                if (data.roomId === roomId) {
+                    if (data.roomId === roomId) {
+                        if (!leavingRoom) {
+                            alert(data.message);
+                        }
+
+                        location.href = '/chat/rooms';
+                    }
+                }
+            });
+
         }, (error) => {
             console.error('stomp error', error);
             isStompConnected = false;
@@ -422,6 +445,32 @@
     }
 
     loadOnlineCount();
+
+    const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+
+    if (leaveRoomBtn) {
+        leavingRoom = true;
+
+        leaveRoomBtn.addEventListener('click', async () => {
+            if (!confirm('채팅방을 나가면 대화 내용이 모두 삭제됩니다. 나가시겠습니까?')) {
+                return;
+            }
+
+            const res = await fetch(`/api/chat/rooms/${roomId}/leave`, {
+                method: 'POST',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
+            });
+
+            if (!res.ok) {
+                alert('채팅방 나가기에 실패했습니다.');
+                return;
+            }
+
+            location.href = '/chat/rooms';
+        });
+    }
 
     window.addEventListener('beforeunload', () => {
         if (stompClient && isStompConnected) {

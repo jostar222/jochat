@@ -199,6 +199,15 @@
                 }
             });
 
+            stompClient.subscribe('/user/queue/rooms-deleted', (message) => {
+                const data = JSON.parse(message.body);
+
+                const roomItem = document.querySelector(`.room-item[data-room-id="${data.roomId}"]`);
+                if (roomItem) {
+                    roomItem.remove();
+                }
+            });
+
         }, (error) => {
             console.error('stomp error', error);
             isStompConnected = false;

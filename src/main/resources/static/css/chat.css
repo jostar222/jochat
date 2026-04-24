@@ -474,3 +474,24 @@ a {
     color: #666;
     text-align: center;
 }
+
+.chat-header-with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.leave-room-btn {
+    border: none;
+    background: #ff5a5a;
+    color: #fff;
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.leave-room-btn:hover {
+    filter: brightness(0.95);
+}

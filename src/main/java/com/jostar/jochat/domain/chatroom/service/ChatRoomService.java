@@ -16,6 +16,8 @@ import com.jostar.jochat.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.jostar.jochat.domain.chatroom.dto.RoomDeletedResponse;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -30,6 +32,7 @@ public class ChatRoomService {
     private final ChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
     private static final DateTimeFormatter ROOM_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional(readOnly = true)
     public List<ChatRoomListItemResponse> getMyRooms(Long loginUserId) {
@@ -186,4 +189,33 @@ public class ChatRoomService {
                 unreadCount
         );
     }
+
+    @Transactional
+    public void leaveRoom(Long roomId, Long userId) {
+        validateRoomMember(roomId, userId);
+
+        List<ChatRoomMember> members = chatRoomMemberRepository.findByChatRoomId(roomId);
+
+        List<String> usernames = members.stream()
+                .map(member -> member.getUser().getUsername())
+                .toList();
+
+        chatMessageRepository.deleteByChatRoomId(roomId);
+        chatRoomMemberRepository.deleteByChatRoomId(roomId);
+        chatRoomRepository.deleteById(roomId);
+
+        RoomDeletedResponse response = new RoomDeletedResponse(
+                roomId,
+                "채팅방이 삭제되었습니다."
+        );
+
+        for (String username : usernames) {
+            messagingTemplate.convertAndSendToUser(
+                    username,
+                    "/queue/rooms-deleted",
+                    response
+            );
+        }
+    }
+
 }

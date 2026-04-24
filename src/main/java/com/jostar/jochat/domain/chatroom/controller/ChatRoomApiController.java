@@ -28,4 +28,17 @@ public class ChatRoomApiController {
                 "roomId", roomId
         );
     }
+
+    @PostMapping("/{roomId}/leave")
+    public Map<String, Object> leaveRoom(@PathVariable Long roomId,
+                                         @AuthenticationPrincipal UserDetails userDetails) {
+        Long loginUserId = chatRoomService.getLoginUserIdByUsername(userDetails.getUsername());
+
+        chatRoomService.leaveRoom(roomId, loginUserId);
+
+        return Map.of(
+                "success", true,
+                "roomId", roomId
+        );
+    }
 }
