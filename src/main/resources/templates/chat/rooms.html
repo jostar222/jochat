@@ -175,20 +175,24 @@
 
         stompClient.debug = null;
 
-        stompClient.connect({}, () => {
+        stompClient.connect({}, async () => {
             console.log('connected');
             isStompConnected = true;
+
+            stompClient.subscribe('/sub/online.count', (message) => {
+                const parsed = JSON.parse(message.body);
+                applyOnlineCount(parsed);
+            });
+
+            await loadOnlineCount();
+
+            setTimeout(loadOnlineCount, 300);
 
             // 🔥 개인 채널 구독 (핵심)
             stompClient.subscribe('/user/queue/rooms', (message) => {
                 console.log('🔥 rooms event:', message.body);  // 👈 이거 추가
                 const parsed = JSON.parse(message.body);
                 applyRoomListUpdate(parsed);
-            });
-
-            stompClient.subscribe('/sub/online.count', (message) => {
-                const parsed = JSON.parse(message.body);
-                applyOnlineCount(parsed);
             });
 
             stompClient.subscribe('/user/queue/random-match', (message) => {
@@ -222,12 +226,22 @@
     }
 
     async function loadOnlineCount() {
-        const res = await fetch('/api/random-chat/online-count');
-        const count = await res.json();
+        try {
+            const res = await fetch('/api/random-chat/online-count');
 
-        const onlineCountEl = document.getElementById('onlineCount');
-        if (onlineCountEl) {
-            onlineCountEl.textContent = count;
+            if (!res.ok) {
+                console.error('online-count 조회 실패:', res.status);
+                return;
+            }
+
+            const count = await res.json();
+
+            const onlineCountEl = document.getElementById('onlineCount');
+            if (onlineCountEl) {
+                onlineCountEl.textContent = count;
+            }
+        } catch (e) {
+            console.error('online-count 조회 오류:', e);
         }
     }
 
@@ -242,8 +256,6 @@
     // init
     // =========================
     connect();
-
-    const randomChatBtn = document.getElementById('randomChatBtn');
 
     const randomChatBtn = document.getElementById('randomChatBtn');
     const cancelRandomChatBtn = document.getElementById('cancelRandomChatBtn');
@@ -298,8 +310,6 @@
             setRandomWaitingMode(false);
         });
     }
-
-    loadOnlineCount();
 
     window.addEventListener('beforeunload', () => {
         if (stompClient && isStompConnected) {

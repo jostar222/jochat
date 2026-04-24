@@ -50,6 +50,7 @@ public class ChatRoomController {
         model.addAttribute("selectedRoomId", roomId);
 
         model.addAttribute("room", chatRoomService.getRoom(roomId));
+        model.addAttribute("roomDisplayName", chatRoomService.getDirectRoomDisplayName(roomId, loginUserId));
         model.addAttribute("loginUserId", loginUserId);
 
         return "chat/room";

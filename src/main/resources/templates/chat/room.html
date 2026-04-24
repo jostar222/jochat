@@ -2,7 +2,7 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title th:text="${room.roomName}">채팅방</title>
+    <title th:text="${roomDisplayName}">채팅방</title>
 
     <link rel="stylesheet" href="/css/chat.css">
 
@@ -86,7 +86,7 @@
     <div class="chat-area">
 
         <div class="chat-header chat-header-with-action">
-            <span th:text="${room.roomName}"></span>
+            <span th:text="${roomDisplayName}"></span>
             <button type="button" id="leaveRoomBtn" class="leave-room-btn">나가기</button>
         </div>
 
@@ -272,9 +272,18 @@
         stompClient = Stomp.over(socket);
         stompClient.debug = null;
 
-        stompClient.connect({}, () => {
+        stompClient.connect({}, async () => {
             console.log('connected');
             isStompConnected = true;
+
+            stompClient.subscribe('/sub/online.count', (message) => {
+                const parsed = JSON.parse(message.body);
+                applyOnlineCount(parsed);
+            });
+
+            await loadOnlineCount();
+
+            setTimeout(loadOnlineCount, 300);
 
             stompClient.subscribe(`/sub/chat.room.${roomId}`, async (message) => {
                 console.log('🔥 rooms event:', message.body);  // 👈 이거 추가
@@ -286,11 +295,6 @@
             stompClient.subscribe('/user/queue/rooms', (message) => {
                 const parsed = JSON.parse(message.body);
                 applyRoomListUpdate(parsed);
-            });
-
-            stompClient.subscribe('/sub/online.count', (message) => {
-                const parsed = JSON.parse(message.body);
-                applyOnlineCount(parsed);
             });
 
             stompClient.subscribe('/user/queue/random-match', (message) => {
@@ -363,12 +367,22 @@
     });
 
     async function loadOnlineCount() {
-        const res = await fetch('/api/random-chat/online-count');
-        const count = await res.json();
+        try {
+            const res = await fetch('/api/random-chat/online-count');
 
-        const onlineCountEl = document.getElementById('onlineCount');
-        if (onlineCountEl) {
-            onlineCountEl.textContent = count;
+            if (!res.ok) {
+                console.error('online-count 조회 실패:', res.status);
+                return;
+            }
+
+            const count = await res.json();
+
+            const onlineCountEl = document.getElementById('onlineCount');
+            if (onlineCountEl) {
+                onlineCountEl.textContent = count;
+            }
+        } catch (e) {
+            console.error('online-count 조회 오류:', e);
         }
     }
 
@@ -443,8 +457,6 @@
             setRandomWaitingMode(false);
         });
     }
-
-    loadOnlineCount();
 
     const leaveRoomBtn = document.getElementById('leaveRoomBtn');
 

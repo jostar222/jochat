@@ -54,9 +54,11 @@ public class ChatRoomService {
                                     loginUserId
                             );
 
+                    String displayRoomName = getDirectRoomDisplayName(room.getId(), loginUserId);
+
                     return new ChatRoomListItemResponse(
                             room.getId(),
-                            room.getRoomName(),
+                            displayRoomName,
                             lastMessage.map(ChatMessage::getContent).orElse(""),
                             lastMessage.map(ChatMessage::getCreatedAt).orElse(null),
                             unreadCount
@@ -216,6 +218,19 @@ public class ChatRoomService {
                     response
             );
         }
+    }
+
+    @Transactional(readOnly = true)
+    public String getDirectRoomDisplayName(Long roomId, Long loginUserId) {
+        List<ChatRoomMember> members = chatRoomMemberRepository.findByChatRoomId(roomId);
+
+        return members.stream()
+                .map(ChatRoomMember::getUser)
+                .filter(user -> !user.getId().equals(loginUserId))
+                //.map(User::getUsername) // 아이디로 표시
+                .map(User::getNickname) // 닉네임으로 표시
+                .findFirst()
+                .orElse("알 수 없는 사용자");
     }
 
 }
