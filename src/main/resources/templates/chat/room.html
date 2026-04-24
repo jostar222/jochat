@@ -3,17 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <title th:text="${room.roomName}">채팅방</title>
+
     <link rel="stylesheet" href="/css/chat.css">
 
+    <!-- CSRF -->
     <meta name="_csrf" th:content="${_csrf.token}" />
     <meta name="_csrf_header" th:content="${_csrf.headerName}" />
 
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 </head>
+
 <body>
 
 <div class="container">
+
+    <!-- 좌측 채팅방 목록 -->
     <div class="sidebar">
         <div class="sidebar-header">채팅</div>
 
@@ -28,30 +33,46 @@
                     <div class="room-name" th:text="${r.roomName}">채팅방명</div>
                     <div class="room-time"
                          th:text="${r.lastMessageTime != null ? #temporals.format(r.lastMessageTime, 'HH:mm') : ''}">
-                        14:30
                     </div>
                 </div>
 
                 <div class="room-bottom">
                     <div class="room-last-message"
                          th:text="${r.lastMessage != null and !#strings.isEmpty(r.lastMessage) ? r.lastMessage : '대화를 시작해보세요.'}">
-                        마지막 메시지
                     </div>
 
                     <div class="unread-badge"
                          th:if="${r.unreadCount > 0}"
                          th:text="${r.unreadCount}">
-                        1
                     </div>
                 </div>
             </a>
         </div>
 
         <div class="user-section">
+
+            <div class="random-section">
+                <div class="online-count">
+                    현재 접속자 <span id="onlineCount">0</span>명
+                </div>
+
+                <button type="button" id="randomChatBtn" class="random-chat-btn">
+                    랜덤채팅하기
+                </button>
+
+                <button type="button" id="cancelRandomChatBtn" class="cancel-random-chat-btn" style="display:none;">
+                    랜덤채팅 취소
+                </button>
+
+                <div id="randomWaitingText" class="random-waiting-text" style="display:none;">
+                    상대를 기다리는 중...
+                </div>
+            </div>
+
             <div class="user-section-title">새 대화 시작</div>
 
             <div th:each="user : ${users}" class="user-item">
-                <div class="user-name" th:text="${user.nickname}">사용자명</div>
+                <div class="user-name" th:text="${user.nickname}"></div>
 
                 <form method="post" th:action="@{/chat/rooms/direct}">
                     <input type="hidden" name="targetUserId" th:value="${user.id}">
@@ -61,14 +82,18 @@
         </div>
     </div>
 
+    <!-- 우측 채팅 영역 -->
     <div class="chat-area">
-        <div class="chat-header" th:text="${room.roomName}">채팅방명</div>
+
+        <div class="chat-header" th:text="${room.roomName}"></div>
+
         <div id="chatBody" class="chat-body"></div>
 
         <div class="chat-footer">
             <input type="text" id="messageInput" placeholder="메시지를 입력하세요">
             <button id="sendBtn">전송</button>
         </div>
+
     </div>
 </div>
 
@@ -86,9 +111,13 @@
     const csrfHeader = document.querySelector('meta[name="_csrf_header"]').content;
 
     let stompClient = null;
-    let lastTime = null;
+    let isStompConnected = false;
     let reconnectTimer = null;
+    let lastTime = null;
 
+    // =========================
+    // 메시지 렌더링
+    // =========================
     function clearMessages() {
         chatBody.innerHTML = '';
         lastTime = null;
@@ -109,12 +138,7 @@
         wrapper.className = 'message ' + (isMe ? 'me' : 'other');
 
         const contentGroup = document.createElement('div');
-
-        if (isMe) {
-            contentGroup.className = 'message-content-group';
-        } else {
-            contentGroup.className = 'message-content-group';
-        }
+        contentGroup.className = 'message-content-group';
 
         const bubbleWrap = document.createElement('div');
 
@@ -148,6 +172,9 @@
         chatBody.scrollTop = chatBody.scrollHeight;
     }
 
+    // =========================
+    // 메시지 조회
+    // =========================
     async function loadMessages() {
         const res = await fetch(`/api/chat/rooms/${roomId}/messages`);
         const data = await res.json();
@@ -156,73 +183,59 @@
         data.forEach(renderMessage);
     }
 
-    function connect() {
-        const socket = new SockJS('/ws-chat');
-        stompClient = Stomp.over(socket);
-
-        // 필요하면 로그 줄이기
-        stompClient.debug = null;
-
-        stompClient.connect({}, () => {
-            console.log('STOMP connected');
-            isStompConnected = true;
-
-            stompClient.subscribe(`/sub/chat.room.${roomId}`, async (message) => {
-                const parsed = JSON.parse(message.body);
-                renderMessage(parsed);
-                updateRoomListPreview(parsed);
-                await markRoomAsRead(roomId);
+    // =========================
+    // 읽음 처리
+    // =========================
+    async function markRoomAsRead(roomId) {
+        try {
+            await fetch(`/api/chat/rooms/${roomId}/read`, {
+                method: 'POST',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
             });
-        }, (error) => {
-            console.error('STOMP error', error);
-            isStompConnected = false;
-            scheduleReconnect();
-        });
 
-        socket.onclose = () => {
-            console.warn('SockJS closed');
-            isStompConnected = false;
-            scheduleReconnect();
-        };
+            clearUnreadBadge(roomId);
+        } catch (e) {
+            console.error('읽음 처리 실패', e);
+        }
     }
 
-    function sendMessage() {
-        const content = input.value.trim();
-        if (!content) return;
+    // =========================
+    // 채팅방 목록 업데이트
+    // =========================
+    function updateUnreadBadge(roomItem, unreadCount) {
+        let badge = roomItem.querySelector('.unread-badge');
 
-        if (!stompClient || !isStompConnected) {
-            console.warn('WebSocket 연결이 아직 안 되었거나 끊어졌습니다.');
+        if (!unreadCount || unreadCount <= 0) {
+            if (badge) badge.remove();
             return;
         }
 
-        stompClient.send('/pub/chat.send', {}, JSON.stringify({
-            roomId: roomId,
-            content: content
-        }));
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'unread-badge';
+            roomItem.querySelector('.room-bottom').appendChild(badge);
+        }
 
-        input.value = '';
-        input.focus();
+        badge.textContent = unreadCount;
     }
 
-    function formatRoomListTime(timeText) {
-        if (!timeText) return '';
-        return timeText.replace('오전 ', '').replace('오후 ', '');
-    }
-
-    function updateRoomListPreview(message) {
-        const roomItem = document.querySelector(`.room-item[data-room-id="${message.roomId}"]`);
+    function applyRoomListUpdate(update) {
+        const roomItem = document.querySelector(`.room-item[data-room-id="${update.roomId}"]`);
         if (!roomItem) return;
 
         const lastMessageEl = roomItem.querySelector('.room-last-message');
         const timeEl = roomItem.querySelector('.room-time');
         const roomList = document.querySelector('.room-list');
 
-        if (lastMessageEl) {
-            lastMessageEl.textContent = message.content;
-        }
+        if (lastMessageEl) lastMessageEl.textContent = update.lastMessage || '';
+        if (timeEl) timeEl.textContent = update.lastMessageTime || '';
 
-        if (timeEl) {
-            timeEl.textContent = formatRoomListTime(message.time);
+        if (update.roomId === roomId) {
+            updateUnreadBadge(roomItem, 0);
+        } else {
+            updateUnreadBadge(roomItem, update.unreadCount);
         }
 
         if (roomList && roomList.firstElementChild !== roomItem) {
@@ -235,31 +248,12 @@
         if (!roomItem) return;
 
         const badge = roomItem.querySelector('.unread-badge');
-        if (badge) {
-            badge.remove();
-        }
+        if (badge) badge.remove();
     }
 
-    async function markRoomAsRead(roomId) {
-        try {
-            const response = await fetch(`/api/chat/rooms/${roomId}/read`, {
-                method: 'POST',
-                headers: {
-                    [csrfHeader]: csrfToken
-                }
-            });
-
-            if (!response.ok) {
-                console.error('읽음 처리 실패 status=', response.status);
-                return;
-            }
-
-            clearUnreadBadge(roomId);
-        } catch (e) {
-            console.error('읽음 처리 실패', e);
-        }
-    }
-
+    // =========================
+    // WebSocket
+    // =========================
     function scheduleReconnect() {
         if (reconnectTimer) return;
 
@@ -267,6 +261,73 @@
             reconnectTimer = null;
             connect();
         }, 1500);
+    }
+
+    function connect() {
+        const socket = new SockJS('/ws-chat');
+        stompClient = Stomp.over(socket);
+        stompClient.debug = null;
+
+        stompClient.connect({}, () => {
+            console.log('connected');
+            isStompConnected = true;
+
+            stompClient.subscribe(`/sub/chat.room.${roomId}`, async (message) => {
+                console.log('🔥 rooms event:', message.body);  // 👈 이거 추가
+                const parsed = JSON.parse(message.body);
+                renderMessage(parsed);
+                await markRoomAsRead(roomId);
+            });
+
+            stompClient.subscribe('/user/queue/rooms', (message) => {
+                const parsed = JSON.parse(message.body);
+                applyRoomListUpdate(parsed);
+            });
+
+            stompClient.subscribe('/sub/online.count', (message) => {
+                const parsed = JSON.parse(message.body);
+                applyOnlineCount(parsed);
+            });
+
+            stompClient.subscribe('/user/queue/random-match', (message) => {
+                const data = JSON.parse(message.body);
+
+                if (data.matched && data.roomId) {
+                    location.href = `/chat/rooms/${data.roomId}`;
+                }
+            });
+
+        }, (error) => {
+            console.error('stomp error', error);
+            isStompConnected = false;
+            scheduleReconnect();
+        });
+
+        socket.onclose = () => {
+            isStompConnected = false;
+            scheduleReconnect();
+        };
+    }
+
+    // =========================
+    // 전송
+    // =========================
+    function sendMessage() {
+        const content = input.value.trim();
+        if (!content) return;
+
+        if (!stompClient || !isStompConnected) {
+            console.warn('연결 안됨');
+            return;
+        }
+
+        stompClient.send('/pub/chat.send', {}, JSON.stringify({
+            roomId: roomId,
+            content: content
+        }));
+
+        input.value = '';
+        input.focus();
     }
 
     sendBtn.addEventListener('click', sendMessage);
@@ -278,18 +339,26 @@
         }
     });
 
-    window.addEventListener('beforeunload', () => {
-        if (stompClient && isStompConnected) {
-            try {
-                stompClient.disconnect(() => {
-                    console.log('STOMP disconnected');
-                });
-            } catch (e) {
-                console.warn('disconnect error', e);
-            }
-        }
-    });
+    async function loadOnlineCount() {
+        const res = await fetch('/api/random-chat/online-count');
+        const count = await res.json();
 
+        const onlineCountEl = document.getElementById('onlineCount');
+        if (onlineCountEl) {
+            onlineCountEl.textContent = count;
+        }
+    }
+
+    function applyOnlineCount(update) {
+        const onlineCountEl = document.getElementById('onlineCount');
+        if (onlineCountEl) {
+            onlineCountEl.textContent = update.onlineCount;
+        }
+    }
+
+    // =========================
+    // init
+    // =========================
     async function init() {
         await loadMessages();
         clearUnreadBadge(roomId);
@@ -298,6 +367,67 @@
 
     init();
 
+    const randomChatBtn = document.getElementById('randomChatBtn');
+    const cancelRandomChatBtn = document.getElementById('cancelRandomChatBtn');
+    const randomWaitingText = document.getElementById('randomWaitingText');
+
+    function setRandomWaitingMode(waiting) {
+        if (randomChatBtn) {
+            randomChatBtn.style.display = waiting ? 'none' : 'block';
+        }
+
+        if (cancelRandomChatBtn) {
+            cancelRandomChatBtn.style.display = waiting ? 'block' : 'none';
+        }
+
+        if (randomWaitingText) {
+            randomWaitingText.style.display = waiting ? 'block' : 'none';
+        }
+    }
+
+    if (randomChatBtn) {
+        randomChatBtn.addEventListener('click', async () => {
+            const res = await fetch('/api/random-chat/match', {
+                method: 'POST',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
+            });
+
+            const data = await res.json();
+
+            if (!data.success) {
+                alert(data.message);
+                return;
+            }
+
+            setRandomWaitingMode(data.waiting);
+        });
+    }
+
+    if (cancelRandomChatBtn) {
+        cancelRandomChatBtn.addEventListener('click', async () => {
+            const res = await fetch('/api/random-chat/cancel', {
+                method: 'POST',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
+            });
+
+            const data = await res.json();
+
+            alert(data.message);
+            setRandomWaitingMode(false);
+        });
+    }
+
+    loadOnlineCount();
+
+    window.addEventListener('beforeunload', () => {
+        if (stompClient && isStompConnected) {
+            stompClient.disconnect();
+        }
+    });
 </script>
 
 </body>

@@ -2,6 +2,7 @@ package com.jostar.jochat.domain.chatroom.service;
 
 import com.jostar.jochat.common.exception.BusinessException;
 import com.jostar.jochat.common.exception.ErrorCode;
+import com.jostar.jochat.domain.chatroom.dto.RoomListUpdateResponse;
 import com.jostar.jochat.domain.chatroom.dto.ChatRoomListItemResponse;
 import com.jostar.jochat.domain.chatroom.entity.ChatRoom;
 import com.jostar.jochat.domain.chatroom.entity.ChatRoomMember;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.time.format.DateTimeFormatter;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +29,7 @@ public class ChatRoomService {
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
+    private static final DateTimeFormatter ROOM_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     @Transactional(readOnly = true)
     public List<ChatRoomListItemResponse> getMyRooms(Long loginUserId) {
@@ -149,5 +152,38 @@ public class ChatRoomService {
 
         Long lastMessageId = lastMessage.map(ChatMessage::getId).orElse(0L);
         member.updateLastReadMessageId(lastMessageId);
+    }
+
+    @Transactional(readOnly = true)
+    public RoomListUpdateResponse buildRoomListUpdate(Long roomId, Long userId) {
+        ChatRoomMember member = chatRoomMemberRepository.findByChatRoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHAT_ROOM_MEMBER));
+
+        ChatMessage lastMessage = chatMessageRepository.findTopByChatRoomIdOrderByCreatedAtDesc(roomId)
+                .orElse(null);
+
+        if (lastMessage == null) {
+            return new RoomListUpdateResponse(
+                    roomId,
+                    "",
+                    "",
+                    0
+            );
+        }
+
+        Long lastReadMessageId = member.getLastReadMessageId() == null ? 0L : member.getLastReadMessageId();
+
+        long unreadCount = chatMessageRepository.countByChatRoomIdAndIdGreaterThanAndSenderIdNot(
+                roomId,
+                lastReadMessageId,
+                userId
+        );
+
+        return new RoomListUpdateResponse(
+                roomId,
+                lastMessage.getContent(),
+                lastMessage.getCreatedAt().format(ROOM_TIME_FORMATTER),
+                unreadCount
+        );
     }
 }

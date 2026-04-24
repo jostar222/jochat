@@ -3,64 +3,301 @@
 <head>
     <meta charset="UTF-8">
     <title>채팅</title>
+
     <link rel="stylesheet" href="/css/chat.css">
+
+    <!-- CSRF -->
+    <meta name="_csrf" th:content="${_csrf.token}" />
+    <meta name="_csrf_header" th:content="${_csrf.headerName}" />
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 </head>
+
 <body>
 
 <div class="container">
+
+    <!-- 좌측 채팅방 목록 -->
     <div class="sidebar">
+
         <div class="sidebar-header">채팅</div>
 
         <div class="room-list">
-            <a th:each="r : ${rooms}"
-               th:href="@{/chat/rooms/{roomId}(roomId=${r.roomId})}"
+
+            <a th:each="room : ${rooms}"
+               th:href="@{/chat/rooms/{roomId}(roomId=${room.roomId})}"
                class="room-item"
-               th:attr="data-room-id=${r.roomId}"
-               th:classappend="${selectedRoomId != null and selectedRoomId == r.roomId} ? ' active'">
+               th:attr="data-room-id=${room.roomId}"
+               th:classappend="${selectedRoomId != null and selectedRoomId == room.roomId} ? ' active'">
 
                 <div class="room-top">
-                    <div class="room-name" th:text="${r.roomName}">채팅방명</div>
+                    <div class="room-name" th:text="${room.roomName}">채팅방명</div>
+
                     <div class="room-time"
-                         th:text="${r.lastMessageTime != null ? #temporals.format(r.lastMessageTime, 'HH:mm') : ''}">
-                        14:30
+                         th:text="${room.lastMessageTime != null ? #temporals.format(room.lastMessageTime, 'HH:mm') : ''}">
                     </div>
                 </div>
 
                 <div class="room-bottom">
                     <div class="room-last-message"
-                         th:text="${r.lastMessage != null and !#strings.isEmpty(r.lastMessage) ? r.lastMessage : '대화를 시작해보세요.'}">
-                        마지막 메시지
+                         th:text="${room.lastMessage != null and !#strings.isEmpty(room.lastMessage) ? room.lastMessage : '대화를 시작해보세요.'}">
                     </div>
 
                     <div class="unread-badge"
-                         th:if="${r.unreadCount > 0}"
-                         th:text="${r.unreadCount}">
-                        1
+                         th:if="${room.unreadCount > 0}"
+                         th:text="${room.unreadCount}">
                     </div>
                 </div>
+
             </a>
+
         </div>
 
+        <!-- 사용자 목록 -->
         <div class="user-section">
+
+            <div class="random-section">
+                <div class="online-count">
+                    현재 접속자 <span id="onlineCount">0</span>명
+                </div>
+
+                <button type="button" id="randomChatBtn" class="random-chat-btn">
+                    랜덤채팅하기
+                </button>
+
+                <button type="button" id="cancelRandomChatBtn" class="cancel-random-chat-btn" style="display:none;">
+                    랜덤채팅 취소
+                </button>
+
+                <div id="randomWaitingText" class="random-waiting-text" style="display:none;">
+                    상대를 기다리는 중...
+                </div>
+            </div>
+
             <div class="user-section-title">새 대화 시작</div>
 
             <div th:each="user : ${users}" class="user-item">
-                <div class="user-name" th:text="${user.nickname}">사용자명</div>
+
+                <div class="user-name" th:text="${user.nickname}"></div>
 
                 <form method="post" th:action="@{/chat/rooms/direct}">
                     <input type="hidden" name="targetUserId" th:value="${user.id}">
                     <button type="submit" class="start-chat-btn">채팅하기</button>
                 </form>
+
             </div>
+
         </div>
+
     </div>
 
+    <!-- 우측 빈 영역 -->
     <div class="chat-area">
+
         <div class="chat-empty">
             대화할 채팅방을 선택하세요.
         </div>
+
     </div>
+
 </div>
+
+<script>
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+    const csrfHeader = document.querySelector('meta[name="_csrf_header"]').content;
+
+    let stompClient = null;
+    let isStompConnected = false;
+    let reconnectTimer = null;
+
+    // =========================
+    // unread badge 업데이트
+    // =========================
+    function updateUnreadBadge(roomItem, unreadCount) {
+        let badge = roomItem.querySelector('.unread-badge');
+
+        if (!unreadCount || unreadCount <= 0) {
+            if (badge) badge.remove();
+            return;
+        }
+
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'unread-badge';
+            roomItem.querySelector('.room-bottom').appendChild(badge);
+        }
+
+        badge.textContent = unreadCount;
+    }
+
+    // =========================
+    // 목록 갱신
+    // =========================
+    function applyRoomListUpdate(update) {
+        const roomItem = document.querySelector(`.room-item[data-room-id="${update.roomId}"]`);
+        if (!roomItem) return;
+
+        const lastMessageEl = roomItem.querySelector('.room-last-message');
+        const timeEl = roomItem.querySelector('.room-time');
+        const roomList = document.querySelector('.room-list');
+
+        if (lastMessageEl) {
+            lastMessageEl.textContent = update.lastMessage || '';
+        }
+
+        if (timeEl) {
+            timeEl.textContent = update.lastMessageTime || '';
+        }
+
+        updateUnreadBadge(roomItem, update.unreadCount);
+
+        if (roomList && roomList.firstElementChild !== roomItem) {
+            roomList.prepend(roomItem);
+        }
+    }
+
+    // =========================
+    // WebSocket 연결
+    // =========================
+    function scheduleReconnect() {
+        if (reconnectTimer) return;
+
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+        }, 1500);
+    }
+
+    function connect() {
+        const socket = new SockJS('/ws-chat');
+        stompClient = Stomp.over(socket);
+
+        stompClient.debug = null;
+
+        stompClient.connect({}, () => {
+            console.log('connected');
+            isStompConnected = true;
+
+            // 🔥 개인 채널 구독 (핵심)
+            stompClient.subscribe('/user/queue/rooms', (message) => {
+                console.log('🔥 rooms event:', message.body);  // 👈 이거 추가
+                const parsed = JSON.parse(message.body);
+                applyRoomListUpdate(parsed);
+            });
+
+            stompClient.subscribe('/sub/online.count', (message) => {
+                const parsed = JSON.parse(message.body);
+                applyOnlineCount(parsed);
+            });
+
+            stompClient.subscribe('/user/queue/random-match', (message) => {
+                const data = JSON.parse(message.body);
+
+                if (data.matched && data.roomId) {
+                    location.href = `/chat/rooms/${data.roomId}`;
+                }
+            });
+
+        }, (error) => {
+            console.error('stomp error', error);
+            isStompConnected = false;
+            scheduleReconnect();
+        });
+
+        socket.onclose = () => {
+            console.warn('socket closed');
+            isStompConnected = false;
+            scheduleReconnect();
+        };
+    }
+
+    async function loadOnlineCount() {
+        const res = await fetch('/api/random-chat/online-count');
+        const count = await res.json();
+
+        const onlineCountEl = document.getElementById('onlineCount');
+        if (onlineCountEl) {
+            onlineCountEl.textContent = count;
+        }
+    }
+
+    function applyOnlineCount(update) {
+        const onlineCountEl = document.getElementById('onlineCount');
+        if (onlineCountEl) {
+            onlineCountEl.textContent = update.onlineCount;
+        }
+    }
+
+    // =========================
+    // init
+    // =========================
+    connect();
+
+    const randomChatBtn = document.getElementById('randomChatBtn');
+
+    const randomChatBtn = document.getElementById('randomChatBtn');
+    const cancelRandomChatBtn = document.getElementById('cancelRandomChatBtn');
+    const randomWaitingText = document.getElementById('randomWaitingText');
+
+    function setRandomWaitingMode(waiting) {
+        if (randomChatBtn) {
+            randomChatBtn.style.display = waiting ? 'none' : 'block';
+        }
+
+        if (cancelRandomChatBtn) {
+            cancelRandomChatBtn.style.display = waiting ? 'block' : 'none';
+        }
+
+        if (randomWaitingText) {
+            randomWaitingText.style.display = waiting ? 'block' : 'none';
+        }
+    }
+
+    if (randomChatBtn) {
+        randomChatBtn.addEventListener('click', async () => {
+            const res = await fetch('/api/random-chat/match', {
+                method: 'POST',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
+            });
+
+            const data = await res.json();
+
+            if (!data.success) {
+                alert(data.message);
+                return;
+            }
+
+            setRandomWaitingMode(data.waiting);
+        });
+    }
+
+    if (cancelRandomChatBtn) {
+        cancelRandomChatBtn.addEventListener('click', async () => {
+            const res = await fetch('/api/random-chat/cancel', {
+                method: 'POST',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
+            });
+
+            const data = await res.json();
+
+            alert(data.message);
+            setRandomWaitingMode(false);
+        });
+    }
+
+    loadOnlineCount();
+
+    window.addEventListener('beforeunload', () => {
+        if (stompClient && isStompConnected) {
+            stompClient.disconnect();
+        }
+    });
+</script>
 
 </body>
 </html>
