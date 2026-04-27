@@ -9,6 +9,7 @@ import java.util.Optional;
 
 public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, Long> {
 
+    @EntityGraph(attributePaths = {"chatRoom"})
     List<ChatRoomMember> findByUserId(Long userId);
 
     @EntityGraph(attributePaths = {"user"})
