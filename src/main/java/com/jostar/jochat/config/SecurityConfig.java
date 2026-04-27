@@ -10,6 +10,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 @Configuration
 @RequiredArgsConstructor
@@ -24,7 +25,6 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/login",
                                 "/signup",
-                                "/h2-console/**",
                                 "/css/**",
                                 "/js/**",
                                 "/images/**"
@@ -42,10 +42,7 @@ public class SecurityConfig {
                         .logoutSuccessUrl("/login")
                 )
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/h2-console/**")
-                )
-                .headers(headers -> headers
-                        .frameOptions(frame -> frame.disable())
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 )
                 .authenticationProvider(authenticationProvider())
                 .httpBasic(Customizer.withDefaults());
