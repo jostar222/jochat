@@ -136,14 +136,20 @@
     // =========================
     function applyRoomListUpdate(update) {
         const roomItem = document.querySelector(`.room-item[data-room-id="${update.roomId}"]`);
-        if (!roomItem) return;
+
+        // 현재 화면에 없는 방이면 새 방이거나 랜덤매칭으로 새로 생긴 방일 수 있음
+        // 가장 안전하게 목록을 다시 로딩
+        if (!roomItem) {
+            location.reload();
+            return;
+        }
 
         const lastMessageEl = roomItem.querySelector('.room-last-message');
         const timeEl = roomItem.querySelector('.room-time');
         const roomList = document.querySelector('.room-list');
 
         if (lastMessageEl) {
-            lastMessageEl.textContent = update.lastMessage || '';
+            lastMessageEl.textContent = update.lastMessage || '대화를 시작해보세요.';
         }
 
         if (timeEl) {

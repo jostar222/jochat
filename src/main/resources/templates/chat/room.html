@@ -227,14 +227,23 @@
 
     function applyRoomListUpdate(update) {
         const roomItem = document.querySelector(`.room-item[data-room-id="${update.roomId}"]`);
-        if (!roomItem) return;
+
+        if (!roomItem) {
+            location.reload();
+            return;
+        }
 
         const lastMessageEl = roomItem.querySelector('.room-last-message');
         const timeEl = roomItem.querySelector('.room-time');
         const roomList = document.querySelector('.room-list');
 
-        if (lastMessageEl) lastMessageEl.textContent = update.lastMessage || '';
-        if (timeEl) timeEl.textContent = update.lastMessageTime || '';
+        if (lastMessageEl) {
+            lastMessageEl.textContent = update.lastMessage || '대화를 시작해보세요.';
+        }
+
+        if (timeEl) {
+            timeEl.textContent = update.lastMessageTime || '';
+        }
 
         if (update.roomId === roomId) {
             updateUnreadBadge(roomItem, 0);
